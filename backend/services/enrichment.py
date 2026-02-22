@@ -24,20 +24,17 @@ def enrich_company_from_url(url: str):
     db = SessionLocal()
 
     try:
-        # 1️⃣ Cache check
         cached = db.query(EnrichedCompany).filter(EnrichedCompany.url == url).first()
         if cached:
-            print("CACHE HIT:", url)
             return {
                 "summary": cached.summary,
-                "whatTheyDo": cached.whatTheyDo,
-                "keywords": cached.keywords,
-                "signals": cached.signals,
-                "sources": cached.sources,
-                "enrichedAt": cached.enrichedAt.isoformat(),  # ✅ always exists
+                "whatTheyDo": json.loads(cached.whatTheyDo),
+                "keywords": json.loads(cached.keywords),
+                "signals": json.loads(cached.signals),
+                "sources": json.loads(cached.sources),
+                "enrichedAt": cached.enrichedAt.isoformat(),
             }
 
-        # 2️⃣ Scrape
         content = scrape_website(url)
         if not content:
             return {
@@ -49,10 +46,7 @@ def enrich_company_from_url(url: str):
                 "enrichedAt": datetime.utcnow().isoformat(),
             }
 
-        # 3️⃣ LLM
         llm_raw = enrich_with_llm(content)
-        print("RAW LLM OUTPUT:\n", llm_raw)
-
         data = extract_json(llm_raw)
 
         if not data:
@@ -60,12 +54,12 @@ def enrich_company_from_url(url: str):
                 "summary": "LLM parsing failed",
                 "whatTheyDo": [],
                 "keywords": [],
+                "keywords": [],
                 "signals": [],
                 "sources": [url],
                 "enrichedAt": datetime.utcnow().isoformat(),
             }
 
-        # ✅ Normalize + inject enrichedAt (Option A)
         result = {
             "summary": data.get("summary", ""),
             "whatTheyDo": data.get("whatTheyDo", []),
@@ -75,21 +69,28 @@ def enrich_company_from_url(url: str):
             "enrichedAt": datetime.utcnow().isoformat(),
         }
 
-        # 4️⃣ Save to DB
         record = EnrichedCompany(
             url=url,
             summary=result["summary"],
-            whatTheyDo=result["whatTheyDo"],
-            keywords=result["keywords"],
-            signals=result["signals"],
-            sources=result["sources"],
-            enrichedAt=datetime.utcnow(),  # ✅ ensure DB also has it
+            whatTheyDo=json.dumps(result["whatTheyDo"]),
+            keywords=json.dumps(result["keywords"]),
+            signals=json.dumps(result["signals"]),
+            sources=json.dumps(result["sources"]),
         )
 
         db.add(record)
         db.commit()
-
         return result
 
+    except Exception as e:
+        print("ENRICH ERROR:", e)
+        return {
+            "summary": "Enrichment failed in production",
+            "whatTheyDo": [],
+            "keywords": [],
+            "signals": [],
+            "sources": [url],
+            "enrichedAt": datetime.utcnow().isoformat(),
+        }
     finally:
         db.close()
