@@ -13,7 +13,7 @@ def on_startup():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://vc-search.vercel.app/"],
+    allow_origins=["https://vc-search.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
